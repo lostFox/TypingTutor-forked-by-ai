@@ -1,14 +1,12 @@
-import asyncio
-import platform
 import pygame
 import sys
 import random
 import time
 
-# --- Pygame 初始化 ---
+# Pygame 初始化
 pygame.init()
 
-# --- 窗口和网格设置 ---
+# 窗口和网格设置
 CHAR_WIDTH_ESTIMATE = 10
 CHAR_HEIGHT_ESTIMATE = 20
 GRID_WIDTH = 60
@@ -20,54 +18,33 @@ WINDOW_PIXEL_WIDTH = GRID_WIDTH * CHAR_WIDTH_ESTIMATE
 WINDOW_PIXEL_HEIGHT = GRID_HEIGHT * CHAR_HEIGHT_ESTIMATE
 
 screen = pygame.display.set_mode((WINDOW_PIXEL_WIDTH, WINDOW_PIXEL_HEIGHT))
-pygame.display.set_caption("This is tt game")
+pygame.display.set_caption("Typing Game")
 
-# --- 字体设置 ---
+# 字体设置
 font = None
 CHAR_WIDTH = CHAR_WIDTH_ESTIMATE
 CHAR_HEIGHT = CHAR_HEIGHT_ESTIMATE
-loaded_font_name = "Default"
 font_names_to_try = ["Consolas", "Courier New", "Lucida Console", "DejaVu Sans Mono", "Liberation Mono", "Arial"]
 
-try:
-    for font_name in font_names_to_try:
-        try:
-            test_font = pygame.font.SysFont(font_name, CHAR_HEIGHT_ESTIMATE, bold=False)
-            if test_font is not None:
-                font = test_font
-                loaded_font_name = font_name
-                break
-        except pygame.error:
-            pass
+for font_name in font_names_to_try:
+    try:
+        font = pygame.font.SysFont(font_name, CHAR_HEIGHT_ESTIMATE, bold=False)
+        if font:
+            break
+    except pygame.error:
+        pass
 
-    if font is None:
-        print("警告: 未找到合适的系统字体. 使用默认 Pygame 字体.")
-        font = pygame.font.Font(None, CHAR_HEIGHT_ESTIMATE)
-        loaded_font_name = "Default Pygame Font"
-
-    char_size = font.size(" ")
-    CHAR_WIDTH = char_size[0]
-    CHAR_HEIGHT = char_size[1]
-
-    WINDOW_PIXEL_WIDTH = GRID_WIDTH * CHAR_WIDTH
-    WINDOW_PIXEL_HEIGHT = GRID_HEIGHT * CHAR_HEIGHT
-    screen = pygame.display.set_mode((WINDOW_PIXEL_WIDTH, WINDOW_PIXEL_HEIGHT))
-
-    print(f"最终使用字体: {font.get_name() if hasattr(font, 'get_name') else loaded_font_name}, 字符尺寸: {CHAR_WIDTH}x{CHAR_HEIGHT}, 窗口尺寸: {WINDOW_PIXEL_WIDTH}x{WINDOW_PIXEL_HEIGHT}")
-
-except pygame.error as e:
-    print(f"严重错误: 字体加载或尺寸计算失败: {e}. 尝试使用估算尺寸.")
+if not font:
     font = pygame.font.Font(None, CHAR_HEIGHT_ESTIMATE)
-    CHAR_WIDTH = CHAR_WIDTH_ESTIMATE
-    CHAR_HEIGHT = CHAR_HEIGHT_ESTIMATE
-    print(f"使用默认字体 (Fallback Error), 字符尺寸: {CHAR_WIDTH}x{CHAR_HEIGHT}, 窗口尺寸: {WINDOW_PIXEL_WIDTH}x{WINDOW_PIXEL_HEIGHT}")
 
-if font is None:
-    print("严重错误: 无法加载任何字体。程序将退出。")
-    pygame.quit()
-    sys.exit()
+char_size = font.size(" ")
+CHAR_WIDTH = char_size[0]
+CHAR_HEIGHT = char_size[1]
+WINDOW_PIXEL_WIDTH = GRID_WIDTH * CHAR_WIDTH
+WINDOW_PIXEL_HEIGHT = GRID_HEIGHT * CHAR_HEIGHT
+screen = pygame.display.set_mode((WINDOW_PIXEL_WIDTH, WINDOW_PIXEL_HEIGHT))
 
-# --- 颜色定义 ---
+# 颜色定义
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 GREEN = (0, 255, 0)
@@ -76,7 +53,7 @@ YELLOW = (255, 255, 0)
 BLUE = (0, 0, 255)
 GRAY = (128, 128, 128)
 
-# --- FallingObject 类 ---
+# FallingObject 类
 class FallingObject:
     def __init__(self, text, speed_grid_per_sec=0.5, color=WHITE, is_bonus=False):
         self.text = text.upper()
@@ -133,7 +110,7 @@ class FallingObject:
         center_y = grid_y * CHAR_HEIGHT + CHAR_HEIGHT / 2
         return center_x, center_y
 
-# --- 难度定义 ---
+# 难度定义
 difficulty_levels = [
     {'level': 1, 'items': ['F', 'J', 'G', 'H'], 'speed_grid_per_sec': 0.3, 'generate_interval': 2.0, 'score_threshold': 50},
     {'level': 2, 'items': ['D', 'K', 'S', 'L'], 'speed_grid_per_sec': 0.35, 'generate_interval': 1.8, 'score_threshold': 150},
@@ -149,17 +126,15 @@ def get_level_settings(level):
     index = max(0, min(level - 1, len(difficulty_levels) - 1))
     return difficulty_levels[index]
 
-# --- 城堡艺术字和状态 ---
+# 城堡艺术字和状态
 initial_castle_art = [
     "############################################################",
     "============================================================",
     "||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||",
 ]
-for line in initial_castle_art:
-    assert len(line) == GRID_WIDTH, f"城堡艺术字长度错误! 期望 {GRID_WIDTH}, 实际 {len(line)}"
 castle_art = []
 
-# --- 游戏状态变量 ---
+# 游戏状态变量
 falling_objects = []
 current_target = None
 score = 0
@@ -167,13 +142,13 @@ current_level = 1
 game_over = False
 last_generate_time = time.time()
 
-# --- 奖励物品设置 ---
+# 奖励物品设置
 BONUS_CHANCE = 0.1
-BONUS_SPEED_MULTIPLIER = 2.0  # 增加到2.0以加快速度
+BONUS_SPEED_MULTIPLIER = 2.0
 BONUS_SCORE_MULTIPLIER = 2
 BONUS_DAMAGE_MULTIPLIER = 2
 
-# --- 生成掉落物体 ---
+# 生成掉落物体
 def generate_falling_object():
     global falling_objects, last_generate_time
     now = time.time()
@@ -184,15 +159,12 @@ def generate_falling_object():
         base_speed = level_settings['speed_grid_per_sec']
         is_bonus = random.random() < BONUS_CHANCE
         color = YELLOW if is_bonus else WHITE
-        speed = base_speed
-        if is_bonus:
-            speed *= BONUS_SPEED_MULTIPLIER
-            speed = max(speed, base_speed * 1.5)  # 确保至少1.5倍基本速度
+        speed = base_speed * (BONUS_SPEED_MULTIPLIER if is_bonus else 1.0)
         new_object = FallingObject(item, speed_grid_per_sec=speed, color=color, is_bonus=is_bonus)
         falling_objects.append(new_object)
         last_generate_time = now
 
-# --- 绘制城堡 ---
+# 绘制城堡
 def draw_castle(surface, font, castle_art_lines):
     current_castle_height_grid = len(castle_art_lines)
     if current_castle_height_grid == 0:
@@ -202,54 +174,43 @@ def draw_castle(surface, font, castle_art_lines):
         line_surface = font.render(line, True, BLUE)
         surface.blit(line_surface, (0, castle_top_pixel_y + i * CHAR_HEIGHT))
 
-# --- 破坏城堡 ---
+# 破坏城堡
 def damage_castle(amount):
     global castle_art, game_over
-    damage_done = 0
     for _ in range(amount):
         if castle_art:
             castle_art.pop(0)
-            damage_done += 1
         else:
-            game_over = True  # 确保城堡全毁时触发游戏结束
+            game_over = True
             break
-    return damage_done
 
-# --- 检查升级 ---
+# 检查升级
 def check_for_level_up():
     global current_level
     if current_level < len(difficulty_levels):
         current_level_settings = get_level_settings(current_level)
         if score >= current_level_settings.get('score_threshold', float('inf')):
             current_level += 1
-            print(f"Level Up! Current Level: {current_level}.")
-            next_level_settings = get_level_settings(current_level)
-            if next_level_settings['items']:
-                print(f"  新物品示例: {next_level_settings['items'][:min(3, len(next_level_settings['items']))]}...")
 
-# --- 绘制游戏结束 ---
+# 绘制游戏结束
 def draw_game_over(surface, font):
     screen.fill(BLACK)
-    game_over_text = "game over"
-    score_text = f"final score: {score}"
-    restart_text = "pass anykey 2 quit"
+    game_over_text = "GAME OVER"
+    score_text = f"Final Score: {score}"
+    restart_text = "Press any key to quit"
     game_over_surface = font.render(game_over_text, True, RED)
     score_surface = font.render(score_text, True, WHITE)
     restart_surface = font.render(restart_text, True, GRAY)
-    game_over_rect = game_over_surface.get_rect(center=(WINDOW_PIXEL_WIDTH // 2, WINDOW_PIXEL_HEIGHT // 3))
-    score_rect = score_surface.get_rect(center=(WINDOW_PIXEL_WIDTH // 2, WINDOW_PIXEL_HEIGHT // 3 + CHAR_HEIGHT * 2))
-    restart_rect = restart_surface.get_rect(center=(WINDOW_PIXEL_WIDTH // 2, WINDOW_PIXEL_HEIGHT // 2))
-    surface.blit(game_over_surface, game_over_rect)
-    surface.blit(score_surface, score_rect)
-    surface.blit(restart_surface, restart_rect)
+    surface.blit(game_over_surface, (WINDOW_PIXEL_WIDTH // 2 - game_over_surface.get_width() // 2, WINDOW_PIXEL_HEIGHT // 3))
+    surface.blit(score_surface, (WINDOW_PIXEL_WIDTH // 2 - score_surface.get_width() // 2, WINDOW_PIXEL_HEIGHT // 3 + CHAR_HEIGHT * 2))
+    surface.blit(restart_surface, (WINDOW_PIXEL_WIDTH // 2 - restart_surface.get_width() // 2, WINDOW_PIXEL_HEIGHT // 2))
 
-# --- 游戏主循环 ---
-async def run_game():
+# 游戏主循环
+def run_game():
     global running, falling_objects, current_target, score, current_level, game_over, castle_art, last_generate_time
     running = True
     clock = pygame.time.Clock()
     castle_art = list(initial_castle_art)
-    FPS = 60
 
     while running:
         for event in pygame.event.get():
@@ -264,45 +225,41 @@ async def run_game():
                         typed_char_upper = typed_char.upper()
                         target_switched = False
                         if current_target and current_target.active:
+                            previous_progress = current_target.progress
                             is_completed = current_target.handle_input(typed_char)
                             if is_completed:
-                                points = len(current_target.text) * 10
-                                if current_target.is_bonus:
-                                    points *= BONUS_SCORE_MULTIPLIER
+                                points = len(current_target.text) * 10 * (BONUS_SCORE_MULTIPLIER if current_target.is_bonus else 1)
                                 score += points
                                 current_target = None
-                                continue
-                            found_alternative = None
-                            for obj in falling_objects:
-                                if obj.active and obj != current_target and obj.text.startswith(typed_char_upper):
-                                    found_alternative = obj
-                                    break
-                            if found_alternative:
-                                current_target.reset_progress()
-                                current_target = found_alternative
-                                target_switched = True
+                            elif current_target.progress <= previous_progress:
+                                # 输入错误，寻找其他目标
+                                found_alternative = None
+                                for obj in falling_objects:
+                                    if obj.active and obj != current_target and obj.text.startswith(typed_char_upper):
+                                        found_alternative = obj
+                                        break
+                                if found_alternative:
+                                    current_target.reset_progress()
+                                    current_target = found_alternative
+                                    target_switched = True
                         if current_target is None and not target_switched:
                             for obj in falling_objects:
                                 if obj.active and obj.text.startswith(typed_char_upper):
                                     current_target = obj
                                     break
-                        if current_target and current_target.active and current_target.progress == len(current_target.text):
-                            current_target = None
 
         if not game_over:
             check_for_level_up()
             generate_falling_object()
             active_objects_next_frame = []
             current_castle_height_grid = len(castle_art)
-            current_castle_top_pixel_y = (GRID_HEIGHT - current_castle_height_grid) * CHAR_HEIGHT if current_castle_height_grid > 0 else WINDOW_PIXEL_HEIGHT
+            castle_top_pixel_y = (GRID_HEIGHT - current_castle_height_grid) * CHAR_HEIGHT if current_castle_height_grid > 0 else WINDOW_PIXEL_HEIGHT
             for obj in falling_objects:
                 if obj.active:
                     obj.move()
-                    if current_castle_height_grid > 0 and obj.get_bottom_pixel_y() >= current_castle_top_pixel_y:
+                    if current_castle_height_grid > 0 and obj.get_bottom_pixel_y() >= castle_top_pixel_y:
                         obj.active = False
-                        damage_amount = 1
-                        if obj.is_bonus:
-                            damage_amount *= BONUS_DAMAGE_MULTIPLIER
+                        damage_amount = BONUS_DAMAGE_MULTIPLIER if obj.is_bonus else 1
                         damage_castle(damage_amount)
                         if obj == current_target:
                             current_target = None
@@ -310,6 +267,7 @@ async def run_game():
                     active_objects_next_frame.append(obj)
             falling_objects = active_objects_next_frame
 
+        # 绘制
         screen.fill(BLACK)
         if game_over:
             draw_game_over(screen, font)
@@ -317,24 +275,20 @@ async def run_game():
             for obj in falling_objects:
                 obj.draw(screen, font)
             draw_castle(screen, font, castle_art)
-            # 绘制火力动画
             if current_target and current_target.active:
                 target_center_x, target_center_y = current_target.get_center_position()
                 castle_center_x = WINDOW_PIXEL_WIDTH / 2
                 castle_bottom_y = WINDOW_PIXEL_HEIGHT - CHAR_HEIGHT * len(castle_art) if castle_art else WINDOW_PIXEL_HEIGHT
                 pygame.draw.line(screen, RED, (castle_center_x, castle_bottom_y), (target_center_x, target_center_y), 2)
-            score_text = f"score: {score} level: {current_level}"
+            score_text = f"Score: {score} Level: {current_level}"
             score_surface = font.render(score_text, True, WHITE)
-            score_rect = score_surface.get_rect()
-            score_rect.topright = (WINDOW_PIXEL_WIDTH - 10, 10)
-            screen.blit(score_surface, score_rect)
+            screen.blit(score_surface, (WINDOW_PIXEL_WIDTH - score_surface.get_width() - 10, 10))
 
         pygame.display.flip()
-        clock.tick(FPS)
-        await asyncio.sleep(1.0 / FPS)
+        clock.tick(60)
 
-if platform.system() == "Emscripten":
-    asyncio.ensure_future(run_game())
-else:
-    if __name__ == "__main__":
-        asyncio.run(run_game())
+    pygame.quit()
+    sys.exit()
+
+if __name__ == "__main__":
+    run_game()
