@@ -1,3 +1,5 @@
+import asyncio
+import platform
 import pygame
 import sys
 import random
@@ -64,41 +66,16 @@ class FallingObject:
         self.pixel_x = grid_x * CHAR_WIDTH
         self.pixel_y = 0
         self.active = True
-        self.progress = 0
 
     def draw(self, surface, font):
         if not self.active:
             return
-        inputted_text = self.text[:self.progress]
-        if inputted_text:
-            input_surface = font.render(inputted_text, True, GREEN)
-            surface.blit(input_surface, (self.pixel_x, int(self.pixel_y)))
-        remaining_text = self.text[self.progress:]
-        if remaining_text:
-            remaining_surface = font.render(remaining_text, True, self.color)
-            surface.blit(remaining_surface, (self.pixel_x + self.progress * CHAR_WIDTH, int(self.pixel_y)))
+        text_surface = font.render(self.text, True, self.color)
+        surface.blit(text_surface, (self.pixel_x, int(self.pixel_y)))
 
     def move(self):
         if self.active:
             self.pixel_y += self.speed_pixel_per_frame
-
-    def handle_input(self, typed_char):
-        if not self.active or self.progress >= len(self.text):
-            return False
-        expected_char = self.text[self.progress].upper()
-        typed_char_upper = typed_char.upper()
-        if typed_char_upper == expected_char:
-            self.progress += 1
-            if self.progress == len(self.text):
-                self.active = False
-                return True
-            return False
-        else:
-            self.progress = 0
-            return False
-
-    def reset_progress(self):
-        self.progress = 0
 
     def get_bottom_pixel_y(self):
         return self.pixel_y + CHAR_HEIGHT
@@ -141,10 +118,14 @@ score = 0
 current_level = 1
 game_over = False
 last_generate_time = time.time()
+show_red_line = False
+red_line_target = None
+red_line_timer = 0
+RED_LINE_DURATION = 0.1  # 红线显示0.1秒
 
 # 奖励物品设置
 BONUS_CHANCE = 0.1
-BONUS_SPEED_MULTIPLIER = 2.0
+BONUS_SPEED_MULTIPLIER = 8.0
 BONUS_SCORE_MULTIPLIER = 2
 BONUS_DAMAGE_MULTIPLIER = 2
 
@@ -206,47 +187,32 @@ def draw_game_over(surface, font):
     surface.blit(restart_surface, (WINDOW_PIXEL_WIDTH // 2 - restart_surface.get_width() // 2, WINDOW_PIXEL_HEIGHT // 2))
 
 # 游戏主循环
-def run_game():
-    global running, falling_objects, current_target, score, current_level, game_over, castle_art, last_generate_time
-    running = True
+async def run_game():
+    global falling_objects, current_target, score, current_level, game_over, castle_art, last_generate_time, show_red_line, red_line_target, red_line_timer
     clock = pygame.time.Clock()
     castle_art = list(initial_castle_art)
 
-    while running:
+    while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                running = False
+                return
             elif event.type == pygame.KEYDOWN:
                 if game_over:
-                    running = False
+                    return
                 else:
                     typed_char = event.unicode
                     if typed_char and (typed_char.isalnum() or typed_char in ';'):
                         typed_char_upper = typed_char.upper()
-                        target_switched = False
-                        if current_target and current_target.active:
-                            previous_progress = current_target.progress
-                            is_completed = current_target.handle_input(typed_char)
-                            if is_completed:
-                                points = len(current_target.text) * 10 * (BONUS_SCORE_MULTIPLIER if current_target.is_bonus else 1)
+                        for obj in falling_objects:
+                            if obj.active and obj.text.startswith(typed_char_upper):
+                                current_target = obj
+                                show_red_line = True
+                                red_line_target = obj
+                                red_line_timer = time.time()
+                                points = len(obj.text) * 10 * (BONUS_SCORE_MULTIPLIER if obj.is_bonus else 1)
                                 score += points
-                                current_target = None
-                            elif current_target.progress <= previous_progress:
-                                # 输入错误，寻找其他目标
-                                found_alternative = None
-                                for obj in falling_objects:
-                                    if obj.active and obj != current_target and obj.text.startswith(typed_char_upper):
-                                        found_alternative = obj
-                                        break
-                                if found_alternative:
-                                    current_target.reset_progress()
-                                    current_target = found_alternative
-                                    target_switched = True
-                        if current_target is None and not target_switched:
-                            for obj in falling_objects:
-                                if obj.active and obj.text.startswith(typed_char_upper):
-                                    current_target = obj
-                                    break
+                                obj.active = False
+                                break
 
         if not game_over:
             check_for_level_up()
@@ -261,11 +227,14 @@ def run_game():
                         obj.active = False
                         damage_amount = BONUS_DAMAGE_MULTIPLIER if obj.is_bonus else 1
                         damage_castle(damage_amount)
-                        if obj == current_target:
-                            current_target = None
                 if obj.active:
                     active_objects_next_frame.append(obj)
             falling_objects = active_objects_next_frame
+
+        # 检查红线显示时间
+        if show_red_line and time.time() - red_line_timer > RED_LINE_DURATION:
+            show_red_line = False
+            red_line_target = None
 
         # 绘制
         screen.fill(BLACK)
@@ -275,8 +244,8 @@ def run_game():
             for obj in falling_objects:
                 obj.draw(screen, font)
             draw_castle(screen, font, castle_art)
-            if current_target and current_target.active:
-                target_center_x, target_center_y = current_target.get_center_position()
+            if show_red_line and red_line_target:
+                target_center_x, target_center_y = red_line_target.get_center_position()
                 castle_center_x = WINDOW_PIXEL_WIDTH / 2
                 castle_bottom_y = WINDOW_PIXEL_HEIGHT - CHAR_HEIGHT * len(castle_art) if castle_art else WINDOW_PIXEL_HEIGHT
                 pygame.draw.line(screen, RED, (castle_center_x, castle_bottom_y), (target_center_x, target_center_y), 2)
@@ -286,9 +255,14 @@ def run_game():
 
         pygame.display.flip()
         clock.tick(60)
+        await asyncio.sleep(1.0 / 60)
 
-    pygame.quit()
-    sys.exit()
+# Pyodide 兼容性处理
+async def main():
+    await run_game()
 
-if __name__ == "__main__":
-    run_game()
+if platform.system() == "Emscripten":
+    asyncio.ensure_future(main())
+else:
+    if __name__ == "__main__":
+        asyncio.run(main())
