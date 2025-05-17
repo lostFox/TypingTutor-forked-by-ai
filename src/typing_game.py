@@ -89,14 +89,69 @@ class FallingObject:
 
 # 难度定义
 difficulty_levels = [
-    {'level': 1, 'items': ['F', 'J', 'G', 'H'], 'speed_grid_per_sec': 0.3, 'generate_interval': 2.0, 'score_threshold': 50},
-    {'level': 2, 'items': ['D', 'K', 'S', 'L'], 'speed_grid_per_sec': 0.35, 'generate_interval': 1.8, 'score_threshold': 150},
-    {'level': 3, 'items': ['A', ';'], 'speed_grid_per_sec': 0.4, 'generate_interval': 1.6, 'score_threshold': 300},
-    {'level': 4, 'items': list('QWERTYUIOPASDFGHJKLZXCVBNM'), 'speed_grid_per_sec': 0.45, 'generate_interval': 1.4, 'score_threshold': 500},
-    {'level': 5, 'items': ['THE', 'AND', 'FOR', 'ARE', 'BUT'], 'speed_grid_per_sec': 0.5, 'generate_interval': 2.5, 'score_threshold': 800},
-    {'level': 6, 'items': ['THIS', 'THAT', 'WITH', 'FROM', 'HAVE'], 'speed_grid_per_sec': 0.55, 'generate_interval': 2.2, 'score_threshold': 1200},
-    {'level': 7, 'items': ['LEARN', 'PYTHON', 'GAME', 'TYPING', 'KEYBOARD'], 'speed_grid_per_sec': 0.6, 'generate_interval': 2.0, 'score_threshold': 1800},
-    {'level': 8, 'items': ['PROGRAMMING', 'DEVELOPMENT', 'COMPUTER', 'SCIENCE', 'INTELLIGENCE'], 'speed_grid_per_sec': 0.65, 'generate_interval': 1.8, 'score_threshold': 2500},
+    {
+        'level': 1,
+        'items': ['F', 'G', 'H', 'J'],
+        'speed_grid_per_sec': 0.3,
+        'generate_interval': 2.0,
+        'score_threshold': 50
+    },  # 食指基准键（中间排）[[5]][[9]]
+
+    {
+        'level': 2,
+        'items': ['T', 'Y', 'U', 'B', 'N', 'M'],
+        'speed_grid_per_sec': 0.35,
+        'generate_interval': 1.8,
+        'score_threshold': 150
+    },  # 食指扩展（上排T/Y/U + 下排B/N/M）[[5]][[8]]
+
+    {
+        'level': 3,
+        'items': ['D', 'K', 'R', 'E'],
+        'speed_grid_per_sec': 0.4,
+        'generate_interval': 1.6,
+        'score_threshold': 300
+    },  # 中指基准键（中间排D/K）+ 上排R/E[[5]][[3]]
+
+    {
+        'level': 4,
+        'items': ['S', 'L', 'W', 'Q'],
+        'speed_grid_per_sec': 0.45,
+        'generate_interval': 1.4,
+        'score_threshold': 500
+    },  # 无名指基准键（中间排S/L）+ 上排W/Q[[5]][[4]]
+
+    {
+        'level': 5,
+        'items': ['A', ';', 'Z', 'X'],
+        'speed_grid_per_sec': 0.5,
+        'generate_interval': 2.5,
+        'score_threshold': 800
+    },  # 小指基准键（中间排A/;）+ 下排Z/X[[5]][[9]]
+
+    {
+        'level': 6,
+        'items': ['THE', 'AND', 'FOR', 'ARE', 'BUT'],
+        'speed_grid_per_sec': 0.55,
+        'generate_interval': 2.2,
+        'score_threshold': 1200
+    },  # 单词入门（高频短词）[[7]][[4]]
+
+    {
+        'level': 7,
+        'items': ['THIS', 'THAT', 'WITH', 'FROM', 'HAVE'],
+        'speed_grid_per_sec': 0.6,
+        'generate_interval': 2.0,
+        'score_threshold': 1800
+    },  # 中等长度单词[[7]][[4]]
+
+    {
+        'level': 8,
+        'items': ['PROGRAMMING', 'DEVELOPMENT', 'COMPUTER', 'SCIENCE', 'INTELLIGENCE'],
+        'speed_grid_per_sec': 0.65,
+        'generate_interval': 1.8,
+        'score_threshold': 2500
+    }  # 长单词与技术术语[[7]][[4]]
 ]
 
 def get_level_settings(level):
