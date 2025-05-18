@@ -66,16 +66,42 @@ class FallingObject:
         self.pixel_x = grid_x * CHAR_WIDTH
         self.pixel_y = 0
         self.active = True
+        self.progress = 0  # 输入进度
 
     def draw(self, surface, font):
         if not self.active:
             return
-        text_surface = font.render(self.text, True, self.color)
-        surface.blit(text_surface, (self.pixel_x, int(self.pixel_y)))
+        # 绘制已输入部分（绿色）和未输入部分（白色或黄色）
+        inputted_text = self.text[:self.progress]
+        remaining_text = self.text[self.progress:]
+        if inputted_text:
+            input_surface = font.render(inputted_text, True, GREEN)
+            surface.blit(input_surface, (self.pixel_x, int(self.pixel_y)))
+        if remaining_text:
+            remaining_surface = font.render(remaining_text, True, self.color)
+            surface.blit(remaining_surface, (self.pixel_x + self.progress * CHAR_WIDTH, int(self.pixel_y)))
 
     def move(self):
         if self.active:
             self.pixel_y += self.speed_pixel_per_frame
+
+    def handle_input(self, typed_char):
+        if not self.active or self.progress >= len(self.text):
+            return False
+        expected_char = self.text[self.progress].upper()
+        typed_char_upper = typed_char.upper()
+        if typed_char_upper == expected_char:
+            self.progress += 1
+            if self.progress == len(self.text):  # 只有完整输入才击落
+                self.active = False
+                return True
+            return False
+        else:
+            self.progress = 0  # 输入错误，重置进度
+            return False
+
+    def reset_progress(self):
+        self.progress = 0
 
     def get_bottom_pixel_y(self):
         return self.pixel_y + CHAR_HEIGHT
@@ -95,63 +121,56 @@ difficulty_levels = [
         'speed_grid_per_sec': 0.3,
         'generate_interval': 2.0,
         'score_threshold': 50
-    },  # 食指基准键（中间排）[[5]][[9]]
-
+    },
     {
         'level': 2,
         'items': ['T', 'Y', 'U', 'B', 'N', 'M'],
         'speed_grid_per_sec': 0.35,
         'generate_interval': 1.8,
         'score_threshold': 150
-    },  # 食指扩展（上排T/Y/U + 下排B/N/M）[[5]][[8]]
-
+    },
     {
         'level': 3,
         'items': ['D', 'K', 'R', 'E'],
         'speed_grid_per_sec': 0.4,
         'generate_interval': 1.6,
         'score_threshold': 300
-    },  # 中指基准键（中间排D/K）+ 上排R/E[[5]][[3]]
-
+    },
     {
         'level': 4,
         'items': ['S', 'L', 'W', 'Q'],
         'speed_grid_per_sec': 0.45,
         'generate_interval': 1.4,
         'score_threshold': 500
-    },  # 无名指基准键（中间排S/L）+ 上排W/Q[[5]][[4]]
-
+    },
     {
         'level': 5,
         'items': ['A', ';', 'Z', 'X'],
         'speed_grid_per_sec': 0.5,
         'generate_interval': 2.5,
         'score_threshold': 800
-    },  # 小指基准键（中间排A/;）+ 下排Z/X[[5]][[9]]
-
+    },
     {
         'level': 6,
         'items': ['THE', 'AND', 'FOR', 'ARE', 'BUT'],
         'speed_grid_per_sec': 0.55,
         'generate_interval': 2.2,
         'score_threshold': 1200
-    },  # 单词入门（高频短词）[[7]][[4]]
-
+    },
     {
         'level': 7,
         'items': ['THIS', 'THAT', 'WITH', 'FROM', 'HAVE'],
         'speed_grid_per_sec': 0.6,
         'generate_interval': 2.0,
         'score_threshold': 1800
-    },  # 中等长度单词[[7]][[4]]
-
+    },
     {
         'level': 8,
         'items': ['PROGRAMMING', 'DEVELOPMENT', 'COMPUTER', 'SCIENCE', 'INTELLIGENCE'],
         'speed_grid_per_sec': 0.65,
         'generate_interval': 1.8,
         'score_threshold': 2500
-    }  # 长单词与技术术语[[7]][[4]]
+    }
 ]
 
 def get_level_settings(level):
@@ -176,7 +195,7 @@ last_generate_time = time.time()
 show_red_line = False
 red_line_target = None
 red_line_timer = 0
-RED_LINE_DURATION = 0.1  # 红线显示0.1秒
+RED_LINE_DURATION = 0.1
 
 # 奖励物品设置
 BONUS_CHANCE = 0.1
@@ -258,16 +277,33 @@ async def run_game():
                     typed_char = event.unicode
                     if typed_char and (typed_char.isalnum() or typed_char in ';'):
                         typed_char_upper = typed_char.upper()
-                        for obj in falling_objects:
-                            if obj.active and obj.text.startswith(typed_char_upper):
-                                current_target = obj
+                        if current_target and current_target.active:
+                            is_completed = current_target.handle_input(typed_char)
+                            if is_completed:
                                 show_red_line = True
-                                red_line_target = obj
+                                red_line_target = current_target
                                 red_line_timer = time.time()
-                                points = len(obj.text) * 10 * (BONUS_SCORE_MULTIPLIER if obj.is_bonus else 1)
+                                points = len(current_target.text) * 10 * (BONUS_SCORE_MULTIPLIER if current_target.is_bonus else 1)
                                 score += points
-                                obj.active = False
-                                break
+                                current_target = None
+                            elif current_target.progress == 0:  # 输入错误
+                                current_target = None  # 清除目标
+                        else:
+                            # 寻找以输入字符开头的新目标
+                            for obj in falling_objects:
+                                if obj.active and obj.text.startswith(typed_char_upper):
+                                    current_target = obj
+                                    if len(obj.text) == 1:  # 单字母直接击落
+                                        show_red_line = True
+                                        red_line_target = obj
+                                        red_line_timer = time.time()
+                                        points = len(obj.text) * 10 * (BONUS_SCORE_MULTIPLIER if obj.is_bonus else 1)
+                                        score += points
+                                        obj.active = False
+                                        current_target = None
+                                    else:  # 单词需要完整输入
+                                        obj.progress = 1  # 开始输入
+                                    break
 
         if not game_over:
             check_for_level_up()
@@ -282,6 +318,8 @@ async def run_game():
                         obj.active = False
                         damage_amount = BONUS_DAMAGE_MULTIPLIER if obj.is_bonus else 1
                         damage_castle(damage_amount)
+                        if obj == current_target:
+                            current_target = None
                 if obj.active:
                     active_objects_next_frame.append(obj)
             falling_objects = active_objects_next_frame
