@@ -4,9 +4,11 @@ import pygame
 import sys
 import random
 import time
+import math  # 新增 math 模块导入
 
 # Pygame 初始化
 pygame.init()
+pygame.mixer.init()  # 初始化音频
 
 # 窗口和网格设置
 CHAR_WIDTH_ESTIMATE = 10
@@ -55,6 +57,40 @@ YELLOW = (255, 255, 0)
 BLUE = (0, 0, 255)
 GRAY = (128, 128, 128)
 PURPLE = (128, 0, 128)
+
+# 爆炸效果类
+class Explosion:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.start_time = time.time()
+        self.duration = 0.3  # 持续0.3秒
+        self.particles = []
+        for _ in range(8):
+            speed = random.uniform(50, 100)  # 像素/秒
+            angle = random.uniform(0, 2 * 3.14159)
+            vx = speed * math.cos(angle)  # 修复：random.cos -> math.cos
+            vy = speed * math.sin(angle)  # 修复：random.sin -> math.sin
+            self.particles.append({
+                'x': x,
+                'y': y,
+                'vx': vx,
+                'vy': vy,
+                'radius': random.uniform(2, 5)
+            })
+
+    def update(self, dt):
+        for particle in self.particles:
+            particle['x'] += particle['vx'] * dt
+            particle['y'] += particle['vy'] * dt
+            particle['radius'] *= 0.95  # 逐渐缩小
+        return time.time() - self.start_time < self.duration
+
+    def draw(self, surface):
+        for particle in self.particles:
+            alpha = 255 * (1 - (time.time() - self.start_time) / self.duration)
+            color = (255, max(0, int(255 - alpha)), 0)  # 红到黄渐变
+            pygame.draw.circle(surface, color, (int(particle['x']), int(particle['y'])), int(particle['radius']))
 
 # FallingObject 类
 class FallingObject:
@@ -209,6 +245,22 @@ BONUS_CHANCE = 0.1
 BONUS_SPEED_MULTIPLIER = 8.0
 BONUS_SCORE_MULTIPLIER = 2
 BONUS_DAMAGE_MULTIPLIER = 2
+explosions = []
+
+# 音频初始化（占位符，需替换为实际文件）
+try:
+    pygame.mixer.music.load("../res/background.mid")  # 替换为你的 MIDI 文件路径或 URL
+    pygame.mixer.music.set_volume(0.5)
+    pygame.mixer.music.play(-1)  # 循环播放
+except pygame.error:
+    print("Warning: Could not load background music. Please provide a valid MIDI file.")
+
+try:
+    hit_sound = pygame.mixer.Sound("../res/hit.wav")  # 替换为你的 WAV 或 MIDI 文件
+    hit_sound.set_volume(0.7)
+except pygame.error:
+    print("Warning: Could not load hit sound. Please provide a valid WAV file.")
+    hit_sound = None
 
 # 生成掉落物体
 def generate_falling_object():
@@ -245,7 +297,7 @@ def draw_castle(surface, font, castle_art_lines):
 
 # 破坏城堡
 def damage_castle(text_length, obj_x, row_index):
-    global castle_art, game_over
+    global castle_art, game_over, explosions
     if not castle_art or row_index >= len(castle_art):
         game_over = True
         return
@@ -257,6 +309,12 @@ def damage_castle(text_length, obj_x, row_index):
         if i < len(target_row):
             target_row[i] = ' '
     castle_art[row_index] = ''.join(target_row)
+    # 添加爆炸效果
+    center_x, center_y = grid_x * CHAR_WIDTH + (text_length * CHAR_WIDTH) / 2, (GRID_HEIGHT - len(castle_art) + row_index) * CHAR_HEIGHT
+    explosions.append(Explosion(center_x, center_y))
+    # 播放击中音效
+    if hit_sound:
+        hit_sound.play()
     # 移除上方的空行
     while castle_art and all(c == ' ' for c in castle_art[0]):
         castle_art.pop(0)
@@ -293,7 +351,7 @@ def draw_game_over(surface, font):
 
 # 游戏主循环
 async def run_game():
-    global falling_objects, current_target, score, current_level, game_over, castle_art, last_generate_time, show_red_line, red_line_target, red_line_timer
+    global falling_objects, current_target, score, current_level, game_over, castle_art, last_generate_time, show_red_line, red_line_target, red_line_timer, explosions
     clock = pygame.time.Clock()
     castle_art = list(initial_castle_art)
     last_generate_time = time.time()
@@ -344,31 +402,35 @@ async def run_game():
             if current_castle_height_grid == 0:
                 game_over = True
             else:
-                castle_top_pixel_y = (GRID_HEIGHT - current_castle_height_grid) * CHAR_HEIGHT
                 for obj in falling_objects:
                     if obj.active:
                         obj.move()
-                        if obj.get_bottom_pixel_y() >= castle_top_pixel_y:
-                            grid_x = int(obj.pixel_x / CHAR_WIDTH)
-                            damage_start = max(0, grid_x)
-                            damage_end = min(GRID_WIDTH, grid_x + len(obj.text))
-                            # 找到每一列的最顶层
-                            hit_row = None
-                            for col in range(damage_start, damage_end):
-                                for row_idx, row in enumerate(castle_art):
-                                    if col < len(row) and row[col] != ' ':
-                                        if hit_row is None or row_idx < hit_row:
-                                            hit_row = row_idx
-                                        break
+                        grid_x = int(obj.pixel_x / CHAR_WIDTH)
+                        damage_start = max(0, grid_x)
+                        damage_end = min(GRID_WIDTH, grid_x + len(obj.text))
+                        hit_row = None
+                        hit_pixel_y = WINDOW_PIXEL_HEIGHT
+                        for col in range(damage_start, damage_end):
+                            for row_idx, row in enumerate(castle_art):
+                                if col < len(row) and row[col] != ' ':
+                                    if hit_row is None or row_idx < hit_row:
+                                        hit_row = row_idx
+                                    break
+                        if hit_row is not None:
+                            hit_pixel_y = (GRID_HEIGHT - current_castle_height_grid + hit_row) * CHAR_HEIGHT
+                        if obj.get_bottom_pixel_y() >= hit_pixel_y:
+                            obj.active = False
+                            damage_amount = len(obj.text) * (BONUS_DAMAGE_MULTIPLIER if obj.is_bonus else 1)
                             if hit_row is not None:
-                                obj.active = False
-                                damage_amount = len(obj.text) * (BONUS_DAMAGE_MULTIPLIER if obj.is_bonus else 1)
                                 damage_castle(damage_amount, obj.pixel_x, hit_row)
-                                if obj == current_target:
-                                    current_target = None
+                            if obj == current_target:
+                                current_target = None
                         if obj.active:
                             active_objects_next_frame.append(obj)
                 falling_objects = active_objects_next_frame
+
+            # 更新爆炸效果
+            explosions[:] = [exp for exp in explosions if exp.update(1.0 / 60)]
 
         if show_red_line and time.time() - red_line_timer > RED_LINE_DURATION:
             show_red_line = False
@@ -381,6 +443,8 @@ async def run_game():
             for obj in falling_objects:
                 obj.draw(screen, font)
             draw_castle(screen, font, castle_art)
+            for exp in explosions:
+                exp.draw(screen)
             if show_red_line and red_line_target:
                 target_center_x, target_center_y = red_line_target.get_center_position()
                 castle_center_x = WINDOW_PIXEL_WIDTH / 2
