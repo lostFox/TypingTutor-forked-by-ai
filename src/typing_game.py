@@ -54,7 +54,7 @@ RED = (255, 0, 0)
 YELLOW = (255, 255, 0)
 BLUE = (0, 0, 255)
 GRAY = (128, 128, 128)
-PURPLE = (128, 0, 128)  # 核心区域颜色
+PURPLE = (128, 0, 128)
 
 # FallingObject 类
 class FallingObject:
@@ -113,7 +113,7 @@ class FallingObject:
         center_y = grid_y * CHAR_HEIGHT + CHAR_HEIGHT / 2
         return center_x, center_y
 
-# 难度定义（增加了混合练习）
+# 难度定义
 difficulty_levels = [
     {
         'level': 1,
@@ -187,9 +187,9 @@ def get_level_settings(level):
 
 # 城堡艺术字和状态
 initial_castle_art = [
-    "#" * GRID_WIDTH,  # 非核心区域
-    "=" * GRID_WIDTH,  # 非核心区域
-    "#" * (GRID_WIDTH // 2 - 5) + "*" * 10 + "#" * (GRID_WIDTH // 2 - 5),  # 核心区域（中间10个字符为*）
+    "#" * GRID_WIDTH,
+    "=" * GRID_WIDTH,
+    "#" * (GRID_WIDTH // 2 - 5) + "*" * 10 + "#" * (GRID_WIDTH // 2 - 5),
 ]
 castle_art = []
 
@@ -204,15 +204,13 @@ show_red_line = False
 red_line_target = None
 red_line_timer = 0
 RED_LINE_DURATION = 0.1
-MEMORY_ITEM_CHANCE = 0.3  # 30% 概率生成记忆训练项
-
-# 奖励物品设置
+MEMORY_ITEM_CHANCE = 0.3
 BONUS_CHANCE = 0.1
 BONUS_SPEED_MULTIPLIER = 8.0
 BONUS_SCORE_MULTIPLIER = 2
 BONUS_DAMAGE_MULTIPLIER = 2
 
-# 生成掉落物体（支持混合练习）
+# 生成掉落物体
 def generate_falling_object():
     global falling_objects, last_generate_time
     now = time.time()
@@ -221,7 +219,6 @@ def generate_falling_object():
     level_settings = get_level_settings(current_level)
     generate_interval = level_settings['generate_interval']
     if level_settings['items'] and now - last_generate_time > generate_interval:
-        # 决定是否生成记忆训练项
         if level_settings['memory_items'] and random.random() < MEMORY_ITEM_CHANCE:
             item = random.choice(level_settings['memory_items'])
         else:
@@ -246,25 +243,24 @@ def draw_castle(surface, font, castle_art_lines):
             char_surface = font.render(char, True, color)
             surface.blit(char_surface, (j * CHAR_WIDTH, castle_top_pixel_y + i * CHAR_HEIGHT))
 
-# 破坏城堡（按单词长度损毁）
-def damage_castle(text_length, obj_x):
+# 破坏城堡
+def damage_castle(text_length, obj_x, row_index):
     global castle_art, game_over
-    if not castle_art:
+    if not castle_art or row_index >= len(castle_art):
         game_over = True
         return
-    # 计算损毁的字符位置
     grid_x = int(obj_x / CHAR_WIDTH)
     damage_start = max(0, grid_x)
     damage_end = min(GRID_WIDTH, grid_x + text_length)
-    top_line = list(castle_art[0])
+    target_row = list(castle_art[row_index])
     for i in range(damage_start, damage_end):
-        if i < len(top_line):
-            top_line[i] = ' '
-    castle_art[0] = ''.join(top_line)
-    # 检查是否需要移除空行
-    if all(c == ' ' for c in castle_art[0]):
+        if i < len(target_row):
+            target_row[i] = ' '
+    castle_art[row_index] = ''.join(target_row)
+    # 移除上方的空行
+    while castle_art and all(c == ' ' for c in castle_art[0]):
         castle_art.pop(0)
-    # 检查核心区域（最底层中间10个字符）
+    # 检查游戏结束条件
     if len(castle_art) == 1:
         core_start = GRID_WIDTH // 2 - 5
         core_end = core_start + 10
@@ -322,13 +318,13 @@ async def run_game():
                                 points = len(current_target.text) * 10 * (BONUS_SCORE_MULTIPLIER if current_target.is_bonus else 1)
                                 score += points
                                 current_target = None
-                            elif current_target.progress == 0:  # 输入错误
+                            elif current_target.progress == 0:
                                 current_target = None
                         else:
                             for obj in falling_objects:
                                 if obj.active and obj.text.startswith(typed_char_upper):
                                     current_target = obj
-                                    if len(obj.text) == 1:  # 单字母直接击落
+                                    if len(obj.text) == 1:
                                         show_red_line = True
                                         red_line_target = obj
                                         red_line_timer = time.time()
@@ -336,7 +332,7 @@ async def run_game():
                                         score += points
                                         obj.active = False
                                         current_target = None
-                                    else:  # 单词需要完整输入
+                                    else:
                                         obj.progress = 1
                                     break
 
@@ -345,19 +341,34 @@ async def run_game():
             generate_falling_object()
             active_objects_next_frame = []
             current_castle_height_grid = len(castle_art)
-            castle_top_pixel_y = (GRID_HEIGHT - current_castle_height_grid) * CHAR_HEIGHT if current_castle_height_grid > 0 else WINDOW_PIXEL_HEIGHT
-            for obj in falling_objects:
-                if obj.active:
-                    obj.move()
-                    if current_castle_height_grid > 0 and obj.get_bottom_pixel_y() >= castle_top_pixel_y:
-                        obj.active = False
-                        damage_amount = len(obj.text) * (BONUS_DAMAGE_MULTIPLIER if obj.is_bonus else 1)
-                        damage_castle(damage_amount, obj.pixel_x)
-                        if obj == current_target:
-                            current_target = None
+            if current_castle_height_grid == 0:
+                game_over = True
+            else:
+                castle_top_pixel_y = (GRID_HEIGHT - current_castle_height_grid) * CHAR_HEIGHT
+                for obj in falling_objects:
                     if obj.active:
-                        active_objects_next_frame.append(obj)
-            falling_objects = active_objects_next_frame
+                        obj.move()
+                        if obj.get_bottom_pixel_y() >= castle_top_pixel_y:
+                            grid_x = int(obj.pixel_x / CHAR_WIDTH)
+                            damage_start = max(0, grid_x)
+                            damage_end = min(GRID_WIDTH, grid_x + len(obj.text))
+                            # 找到每一列的最顶层
+                            hit_row = None
+                            for col in range(damage_start, damage_end):
+                                for row_idx, row in enumerate(castle_art):
+                                    if col < len(row) and row[col] != ' ':
+                                        if hit_row is None or row_idx < hit_row:
+                                            hit_row = row_idx
+                                        break
+                            if hit_row is not None:
+                                obj.active = False
+                                damage_amount = len(obj.text) * (BONUS_DAMAGE_MULTIPLIER if obj.is_bonus else 1)
+                                damage_castle(damage_amount, obj.pixel_x, hit_row)
+                                if obj == current_target:
+                                    current_target = None
+                        if obj.active:
+                            active_objects_next_frame.append(obj)
+                falling_objects = active_objects_next_frame
 
         if show_red_line and time.time() - red_line_timer > RED_LINE_DURATION:
             show_red_line = False

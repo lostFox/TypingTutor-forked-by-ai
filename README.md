@@ -1,6 +1,6 @@
-> Servile masses, arise, arise!  
-We'll change henceforth the old tradition,  
-And spurn the dust to win the prize!
+> Servile masses, arise, arise!  
+We'll change henceforth the old tradition,  
+And spurn the dust to win the prize!
 
 If there is no master, who is slave?  
 
