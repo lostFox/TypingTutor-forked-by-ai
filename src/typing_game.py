@@ -54,6 +54,7 @@ RED = (255, 0, 0)
 YELLOW = (255, 255, 0)
 BLUE = (0, 0, 255)
 GRAY = (128, 128, 128)
+PURPLE = (128, 0, 128)  # 核心区域颜色
 
 # FallingObject 类
 class FallingObject:
@@ -66,12 +67,11 @@ class FallingObject:
         self.pixel_x = grid_x * CHAR_WIDTH
         self.pixel_y = 0
         self.active = True
-        self.progress = 0  # 输入进度
+        self.progress = 0
 
     def draw(self, surface, font):
         if not self.active:
             return
-        # 绘制已输入部分（绿色）和未输入部分（白色或黄色）
         inputted_text = self.text[:self.progress]
         remaining_text = self.text[self.progress:]
         if inputted_text:
@@ -92,12 +92,12 @@ class FallingObject:
         typed_char_upper = typed_char.upper()
         if typed_char_upper == expected_char:
             self.progress += 1
-            if self.progress == len(self.text):  # 只有完整输入才击落
+            if self.progress == len(self.text):
                 self.active = False
                 return True
             return False
         else:
-            self.progress = 0  # 输入错误，重置进度
+            self.progress = 0
             return False
 
     def reset_progress(self):
@@ -113,63 +113,71 @@ class FallingObject:
         center_y = grid_y * CHAR_HEIGHT + CHAR_HEIGHT / 2
         return center_x, center_y
 
-# 难度定义
+# 难度定义（增加了混合练习）
 difficulty_levels = [
     {
         'level': 1,
         'items': ['F', 'G', 'H', 'J'],
         'speed_grid_per_sec': 0.3,
         'generate_interval': 2.0,
-        'score_threshold': 50
+        'score_threshold': 50,
+        'memory_items': []
     },
     {
         'level': 2,
         'items': ['T', 'Y', 'U', 'B', 'N', 'M'],
         'speed_grid_per_sec': 0.35,
         'generate_interval': 1.8,
-        'score_threshold': 150
+        'score_threshold': 150,
+        'memory_items': ['F', 'G', 'H', 'J']
     },
     {
         'level': 3,
         'items': ['D', 'K', 'R', 'E'],
         'speed_grid_per_sec': 0.4,
         'generate_interval': 1.6,
-        'score_threshold': 300
+        'score_threshold': 300,
+        'memory_items': ['F', 'G', 'H', 'J', 'T', 'Y', 'U', 'B', 'N', 'M']
     },
     {
         'level': 4,
         'items': ['S', 'L', 'W', 'Q'],
         'speed_grid_per_sec': 0.45,
         'generate_interval': 1.4,
-        'score_threshold': 500
+        'score_threshold': 500,
+        'memory_items': ['F', 'G', 'H', 'J', 'T', 'Y', 'U', 'B', 'N', 'M', 'D', 'K', 'R', 'E']
     },
     {
         'level': 5,
         'items': ['A', ';', 'Z', 'X'],
         'speed_grid_per_sec': 0.5,
         'generate_interval': 2.5,
-        'score_threshold': 800
+        'score_threshold': 800,
+        'memory_items': ['F', 'G', 'H', 'J', 'T', 'Y', 'U', 'B', 'N', 'M', 'D', 'K', 'R', 'E', 'S', 'L', 'W', 'Q']
     },
     {
         'level': 6,
         'items': ['THE', 'AND', 'FOR', 'ARE', 'BUT'],
         'speed_grid_per_sec': 0.55,
         'generate_interval': 2.2,
-        'score_threshold': 1200
+        'score_threshold': 1200,
+        'memory_items': ['F', 'G', 'H', 'J', 'T', 'Y', 'U', 'B', 'N', 'M', 'D', 'K', 'R', 'E', 'S', 'L', 'W', 'Q', 'A', ';', 'Z', 'X']
     },
     {
         'level': 7,
         'items': ['THIS', 'THAT', 'WITH', 'FROM', 'HAVE'],
         'speed_grid_per_sec': 0.6,
         'generate_interval': 2.0,
-        'score_threshold': 1800
+        'score_threshold': 1800,
+        'memory_items': ['THE', 'AND', 'FOR', 'ARE', 'BUT']
     },
     {
         'level': 8,
         'items': ['PROGRAMMING', 'DEVELOPMENT', 'COMPUTER', 'SCIENCE', 'INTELLIGENCE'],
         'speed_grid_per_sec': 0.65,
         'generate_interval': 1.8,
-        'score_threshold': 2500
+        'score_threshold': 2500,
+        'memory_items': ['THIS', 'THAT', 'WITH', 'FROM', 'HAVE']
     }
 ]
 
@@ -179,9 +187,9 @@ def get_level_settings(level):
 
 # 城堡艺术字和状态
 initial_castle_art = [
-    "############################################################",
-    "============================================================",
-    "||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||",
+    "#" * GRID_WIDTH,  # 非核心区域
+    "=" * GRID_WIDTH,  # 非核心区域
+    "#" * (GRID_WIDTH // 2 - 5) + "*" * 10 + "#" * (GRID_WIDTH // 2 - 5),  # 核心区域（中间10个字符为*）
 ]
 castle_art = []
 
@@ -191,11 +199,12 @@ current_target = None
 score = 0
 current_level = 1
 game_over = False
-last_generate_time = time.time()
+last_generate_time = None
 show_red_line = False
 red_line_target = None
 red_line_timer = 0
 RED_LINE_DURATION = 0.1
+MEMORY_ITEM_CHANCE = 0.3  # 30% 概率生成记忆训练项
 
 # 奖励物品设置
 BONUS_CHANCE = 0.1
@@ -203,14 +212,20 @@ BONUS_SPEED_MULTIPLIER = 8.0
 BONUS_SCORE_MULTIPLIER = 2
 BONUS_DAMAGE_MULTIPLIER = 2
 
-# 生成掉落物体
+# 生成掉落物体（支持混合练习）
 def generate_falling_object():
     global falling_objects, last_generate_time
     now = time.time()
+    if last_generate_time is None:
+        last_generate_time = now
     level_settings = get_level_settings(current_level)
     generate_interval = level_settings['generate_interval']
     if level_settings['items'] and now - last_generate_time > generate_interval:
-        item = random.choice(level_settings['items'])
+        # 决定是否生成记忆训练项
+        if level_settings['memory_items'] and random.random() < MEMORY_ITEM_CHANCE:
+            item = random.choice(level_settings['memory_items'])
+        else:
+            item = random.choice(level_settings['items'])
         base_speed = level_settings['speed_grid_per_sec']
         is_bonus = random.random() < BONUS_CHANCE
         color = YELLOW if is_bonus else WHITE
@@ -226,18 +241,38 @@ def draw_castle(surface, font, castle_art_lines):
         return
     castle_top_pixel_y = (GRID_HEIGHT - current_castle_height_grid) * CHAR_HEIGHT
     for i, line in enumerate(castle_art_lines):
-        line_surface = font.render(line, True, BLUE)
-        surface.blit(line_surface, (0, castle_top_pixel_y + i * CHAR_HEIGHT))
+        for j, char in enumerate(line):
+            color = PURPLE if char == '*' else BLUE
+            char_surface = font.render(char, True, color)
+            surface.blit(char_surface, (j * CHAR_WIDTH, castle_top_pixel_y + i * CHAR_HEIGHT))
 
-# 破坏城堡
-def damage_castle(amount):
+# 破坏城堡（按单词长度损毁）
+def damage_castle(text_length, obj_x):
     global castle_art, game_over
-    for _ in range(amount):
-        if castle_art:
-            castle_art.pop(0)
-        else:
+    if not castle_art:
+        game_over = True
+        return
+    # 计算损毁的字符位置
+    grid_x = int(obj_x / CHAR_WIDTH)
+    damage_start = max(0, grid_x)
+    damage_end = min(GRID_WIDTH, grid_x + text_length)
+    top_line = list(castle_art[0])
+    for i in range(damage_start, damage_end):
+        if i < len(top_line):
+            top_line[i] = ' '
+    castle_art[0] = ''.join(top_line)
+    # 检查是否需要移除空行
+    if all(c == ' ' for c in castle_art[0]):
+        castle_art.pop(0)
+    # 检查核心区域（最底层中间10个字符）
+    if len(castle_art) == 1:
+        core_start = GRID_WIDTH // 2 - 5
+        core_end = core_start + 10
+        core_chars = castle_art[0][core_start:core_end]
+        if all(c == ' ' for c in core_chars):
             game_over = True
-            break
+        elif sum(1 for c in castle_art[0] if c == ' ') >= GRID_WIDTH // 2:
+            game_over = True
 
 # 检查升级
 def check_for_level_up():
@@ -265,6 +300,7 @@ async def run_game():
     global falling_objects, current_target, score, current_level, game_over, castle_art, last_generate_time, show_red_line, red_line_target, red_line_timer
     clock = pygame.time.Clock()
     castle_art = list(initial_castle_art)
+    last_generate_time = time.time()
 
     while True:
         for event in pygame.event.get():
@@ -287,9 +323,8 @@ async def run_game():
                                 score += points
                                 current_target = None
                             elif current_target.progress == 0:  # 输入错误
-                                current_target = None  # 清除目标
+                                current_target = None
                         else:
-                            # 寻找以输入字符开头的新目标
                             for obj in falling_objects:
                                 if obj.active and obj.text.startswith(typed_char_upper):
                                     current_target = obj
@@ -302,7 +337,7 @@ async def run_game():
                                         obj.active = False
                                         current_target = None
                                     else:  # 单词需要完整输入
-                                        obj.progress = 1  # 开始输入
+                                        obj.progress = 1
                                     break
 
         if not game_over:
@@ -316,20 +351,18 @@ async def run_game():
                     obj.move()
                     if current_castle_height_grid > 0 and obj.get_bottom_pixel_y() >= castle_top_pixel_y:
                         obj.active = False
-                        damage_amount = BONUS_DAMAGE_MULTIPLIER if obj.is_bonus else 1
-                        damage_castle(damage_amount)
+                        damage_amount = len(obj.text) * (BONUS_DAMAGE_MULTIPLIER if obj.is_bonus else 1)
+                        damage_castle(damage_amount, obj.pixel_x)
                         if obj == current_target:
                             current_target = None
-                if obj.active:
-                    active_objects_next_frame.append(obj)
+                    if obj.active:
+                        active_objects_next_frame.append(obj)
             falling_objects = active_objects_next_frame
 
-        # 检查红线显示时间
         if show_red_line and time.time() - red_line_timer > RED_LINE_DURATION:
             show_red_line = False
             red_line_target = None
 
-        # 绘制
         screen.fill(BLACK)
         if game_over:
             draw_game_over(screen, font)
@@ -350,7 +383,6 @@ async def run_game():
         clock.tick(60)
         await asyncio.sleep(1.0 / 60)
 
-# Pyodide 兼容性处理
 async def main():
     await run_game()
 
